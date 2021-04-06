@@ -33,12 +33,15 @@ uint16_t lastSendDaqMessage = millis();
 
 // Output Pins
 #define PIN_FAN_OUT 3
-#define PIN_BRAKE_OUT 4
+#define PIN_BRAKE_OUT 9
 
 // intialize output values
 bool brakeSig = false;
 int fanSig;
 bool autoTemp = false;
+
+// function declarations
+void sampleSensors();
 
 
 // wheel speed sampling
@@ -55,6 +58,16 @@ void sendDaqData(){
 
   // turn off interrupts
   cli();
+
+  uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  bufToSend[0] = brakeSig;
+  bufToSend[1] = autoTemp;
+
+  // send message
+  CAN.sendMsgBuf(ID_REAR_DAQ_DATA, 0, 8, bufToSend);
+
+  // update last send time stamp
+  lastSendDaqMessage = millis();
 
   // sample wheels and damper and temperature
   sampleSensors();
@@ -82,11 +95,11 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
   switch(canID){
     case ID_DASH_RIGHT_DATA:
       autoTemp = buf[2];
-      // digitalWrite(PIN_FAN_OUT, autoTemp) // write fan output 'high' or 'low'
+      digitalWrite(PIN_FAN_OUT, autoTemp); // write fan output 'high' or 'low'
       break;
     case ID_FRONT_PEDALBOARD:
       brakeSig = buf[5];
-      // digitalWrite(PIN_BRAKE_OUT, brakeSig) // write brake output 'high' or 'low'
+      digitalWrite(PIN_BRAKE_OUT, brakeSig); // write brake output 'high' or 'low'
       break;
   }
 }
@@ -125,6 +138,10 @@ void loop() {
     CAN.readMsgBuf(&id, &len, buf);
     filterCAN(id, buf);
   }
+
+   if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
+       sendDaqData();
+   }
 
 // interrupts
 

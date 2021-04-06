@@ -116,6 +116,7 @@ void selfTest(){
   // Turn on LEDs one by one
 
   // show message on screen
+  print_to_lcd(3);
 
   // Test Button Push
 
@@ -175,10 +176,9 @@ void setup() {
   lcd.begin(16, 2);
   lcd.clear();
   lcd.noCursor();
-  lcd.setCursor(2,0);
-  lcd.print("Welcome");
-  lcd.setCursor(2,1);
-  lcd.print("AERO");
+  
+  // show welcome menu
+  print_to_lcd(0);
 
   // Initialize CAN
   // IF USING CAN INTERRUPT PIN, UNCOMMENT THIS:

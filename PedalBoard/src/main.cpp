@@ -10,7 +10,6 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <mcp_can.h>
-#include <SPI.h>
 
 // CAN initilization
 #define PIN_SPI_CAN_CS 5
@@ -65,9 +64,8 @@ uint16_t pedal0 = 0, pedal1 = 0, brake0 = 0, brake1 = 0, steer = 0;
 uint8_t pedal0_mapped, pedal1_mapped, brake0_mapped, brake1_mapped, steer_mapped,
         pedal_avg, brake_avg;
 
-#define DAQ_INTERVAL 100 // time in ms
-uint16_t lastSendDaqMessage;
-uint16_t currentMillis;
+#define DAQ_CAN_INTERVAL 100 // time in ms
+uint16_t lastSendDaqMessage = millis();
 
 // default values (updated from DASH)
 uint8_t ready_to_drive = 0; // from DASH precharge / start value
@@ -82,6 +80,7 @@ uint16_t wheel_right, wheel_left, damper_left, damper_right;
 
 // function declarations
 void sampleACC();
+void sampleBrake();
 void setEERPOM();
 void filterCAN(unsigned long canID, unsigned char buf[8]);
 void sendRinehartCommand();
@@ -90,21 +89,21 @@ void sendDaqData();
 void setup() {
   // get current eeprom values
   // set eeprom values to default if none exist
-  bool setValue = false; // defaults have been set
-  if(!(EEPROM.get(EEPROM_BASE, setValue))){
-    EEPROM.update(TORQUE_EEPROM, max_torque);
-    EEPROM.update(PEDAL0_MIN_EEPROM, pedal0_min);
-    EEPROM.update(PEDAL0_MAX_EEPROM, pedal0_max);
-    EEPROM.update(PEDAL1_MIN_EEPROM, pedal1_max);
-    EEPROM.update(PEDAL1_MAX_EEPROM, pedal1_max);
-    EEPROM.update(EEPROM_BASE, true);
-  }else{
-    EEPROM.get(TORQUE_EEPROM, max_torque);
-    EEPROM.get(PEDAL0_MIN_EEPROM, pedal0_min);
-    EEPROM.get(PEDAL0_MAX_EEPROM, pedal0_max);
-    EEPROM.get(PEDAL1_MIN_EEPROM, pedal1_min);
-    EEPROM.get(PEDAL1_MAX_EEPROM, pedal1_max);
-  }
+//   bool setValue = false; // defaults have been set
+//   if(!(EEPROM.get(EEPROM_BASE, setValue))){
+//     EEPROM.update(TORQUE_EEPROM, max_torque);
+//     EEPROM.update(PEDAL0_MIN_EEPROM, pedal0_min);
+//     EEPROM.update(PEDAL0_MAX_EEPROM, pedal0_max);
+//     EEPROM.update(PEDAL1_MIN_EEPROM, pedal1_max);
+//     EEPROM.update(PEDAL1_MAX_EEPROM, pedal1_max);
+//     EEPROM.update(EEPROM_BASE, true);
+//   }else{
+//     EEPROM.get(TORQUE_EEPROM, max_torque);
+//     EEPROM.get(PEDAL0_MIN_EEPROM, pedal0_min);
+//     EEPROM.get(PEDAL0_MAX_EEPROM, pedal0_max);
+//     EEPROM.get(PEDAL1_MIN_EEPROM, pedal1_min);
+//     EEPROM.get(PEDAL1_MAX_EEPROM, pedal1_max);
+//   }
 
   // set pin modes
   pinMode(PIN_STEER, INPUT);
@@ -113,68 +112,71 @@ void setup() {
   pinMode(PIN_BRAKE0, INPUT);
   pinMode(PIN_BRAKE1, INPUT);
 
-  cli();
+  // start CAN interface
+  CAN.begin(MCP_ANY, CAN_500KBPS, MCP_16MHZ);
+  CAN.setMode(MCP_NORMAL);
 
-  //set timer1 interrupt at 100Hz
-  TCCR1A = 0;// set entire TCCR1A register to 0
-  TCCR1B = 0;// same for TCCR1B
-  TCNT1  = 0;//initialize counter value to 0
-  // set compare match register for 10hz increments
-  OCR1A = 156.25;// = (16*10^6) / (1*10240) - 1 (must be <65536)
-  // turn on CTC mode
-  TCCR1B |= (1 << WGM12);
-  // Set CS12 and CS10 bits for 10240 prescaler
-  TCCR1B |= (1 << CS12) | (1 << CS10);  
-  // enable timer compare interrupt
-  TIMSK1 |= (1 << OCIE1A);
+//   cli();
 
-  sei();
+//   //set timer1 interrupt at 100Hz
+//   TCCR1A = 0;// set entire TCCR1A register to 0
+//   TCCR1B = 0;// same for TCCR1B
+//   TCNT1  = 0;//initialize counter value to 0
+//   // set compare match register for 10hz increments
+//   OCR1A = 156.25;// = (16*10^6) / (1*10240) - 1 (must be <65536)
+//   // turn on CTC mode
+//   TCCR1B |= (1 << WGM12);
+//   // Set CS12 and CS10 bits for 10240 prescaler
+//   TCCR1B |= (1 << CS12) | (1 << CS10);  
+//   // enable timer compare interrupt
+//   TIMSK1 |= (1 << OCIE1A);
+
+//   sei();
 
 }
 
 void loop() {
 
-  currentMillis = millis();
 
-  // initialize CAN buffers
-  unsigned long id; 
-  unsigned char len = 0; 
-  unsigned char buf[8];
-  
-  // send Daq
-  if(currentMillis - lastSendDaqMessage > DAQ_INTERVAL){
+    // initialize CAN buffers
+    unsigned long id; 
+    unsigned char len = 0; 
+    unsigned char buf[8];
+
+    // send Daq
+    if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
     sendDaqData();
-  }
+    }
 
   // read CANbus for incomming messages
-    if(CAN_MSGAVAIL == CAN.checkReceive()){
-      CAN.readMsgBuf(&id, &len, buf);
-      filterCAN(id, buf);
-    }
+    // if(CAN_MSGAVAIL == CAN.checkReceive()){
+    //     CAN.readMsgBuf(&id, &len, buf);
+    //     filterCAN(id, buf);
+    // }
   
 }
 
 // create and send Data CAN Message
 void sendDaqData(){
 
+// turn off interrupts
+  cli();
 
-  sampleACC();
-  sampleBrake();
+//   sampleACC();
+//   sampleBrake();
 
   // build DAQ Message
-  unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bufToSend[0] = wheel_left;
-  bufToSend[1] = wheel_right;
-  bufToSend[2] = damper_left;
-  bufToSend[3] = damper_right;
-  bufToSend[4] = steer_mapped;
-  bufToSend[5] = brake_avg;
-  bufToSend[6] = pedal_avg;
+  uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+  bufToSend[0] = 0; //wheel_left;
+  bufToSend[1] = 0; //wheel_right;
+  bufToSend[2] = 0; //damper_left;
+  bufToSend[3] = 0; //damper_right;
+  bufToSend[4] = 0; //steer_mapped;
+  bufToSend[5] = 0; //brake_avg;
+  bufToSend[6] = 0; //pedal_avg;
 
-  // turn off interrupts
-  cli();
   // send message
-  CAN.sendMsgBuf(ID_DASH_RIGHT_DATA, 0, 8, bufToSend);
+  CAN.sendMsgBuf(ID_PEDAL_DATA, 0, 8, bufToSend);
 
   // update last send time
   lastSendDaqMessage = millis();
@@ -298,24 +300,24 @@ void sendRinehartCommand(){
 
 //timer1 interrupt 100Hz
 // send rinehart command for torque
-ISR(TIMER1_COMPA_vect){
+// ISR(TIMER1_COMPA_vect){
 
-  cli();
-  // switch directions, disable inverter
-  if (direction != lastDirection){
-    lastDirection = direction; // save new direction
-    ready_to_drive = false; // disable interter
-    direction = ~direction; // set to old direction 
-    sendRinehartCommand(); // send data (dsiable inverter w/ old direction)
-    ready_to_drive = true; // turn inverter back on
-    direction = lastDirection; // update to current direction
-  }
+//   cli();
+//   // switch directions, disable inverter
+//   if (direction != lastDirection){
+//     lastDirection = direction; // save new direction
+//     ready_to_drive = false; // disable interter
+//     direction = ~direction; // set to old direction 
+//     sendRinehartCommand(); // send data (dsiable inverter w/ old direction)
+//     ready_to_drive = true; // turn inverter back on
+//     direction = lastDirection; // update to current direction
+//   }
 
-  sendRinehartCommand(); // send command values to rinehart
+//   sendRinehartCommand(); // send command values to rinehart
 
-  sei();
+//   sei();
 
-}
+// }
 
 // // Consistent interrupt for sampling wheel speed sensors
 // ISR(TIMER0_COMPA_vect) {

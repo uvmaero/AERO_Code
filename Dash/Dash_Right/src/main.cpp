@@ -37,7 +37,7 @@ uint16_t lastSendDaqMessage = millis();
 // output pins
 #define PIN_BMS_LED 4 // bms fault indicator
 #define PIN_IMD_LED 6 // imd fault indicator
-#define PIN_TMS_LED 7 // tms fault indicator
+#define PIN_TMS_LED 7 // tms fault indicator BMS HANDELS TEMPERATURE
 #define PIN_RTD_LED 9 // 'start button' LED
 #define PIN_RTD_IND 10 // buzzer (low side mosfet)
 // create array for fault pins
@@ -64,7 +64,7 @@ uint8_t brake_mapped;
 
 // Precharge values
 bool ready_to_drive = false; // ready to drive, precharge done, buzzer done
-bool rtds_on = false; // buzzer sound
+// bool rtds_on = false; // buzzer sound
 bool precharge_state_enter = false; // state change
 
 // precharge State
@@ -96,7 +96,7 @@ uint8_t cycles_since_last_rinehart_message = MAX_MISSED_RINEHART_MESSAGES;
 #define RINEHART_PIN_RTDS 2
 
 // voltages
-// hardcoded voltage, should be taken from CAN data
+// NOTE: hardcoded voltage, should be taken from CAN data
 uint16_t emus_voltage = 265.0;  
 uint16_t rinehart_voltage = 0;
 
@@ -145,7 +145,6 @@ void setup() {
   CAN.begin(MCP_ANY, CAN_500KBPS, MCP_16MHZ);
   CAN.setMode(MCP_NORMAL);
 
-
 }
 
 void loop() {
@@ -175,7 +174,7 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
       break;
     case ID_FAULTLATCHER:
       digitalWrite(PIN_BMS_LED, buf[0]);
-      digitalWrite(PIN_TMS_LED, buf[1]);
+    //   digitalWrite(PIN_TMS_LED, buf[1]);
       digitalWrite(PIN_IMD_LED, buf[2]);
       break;
   }
@@ -226,14 +225,14 @@ void selfTest(){
 
   // Turn off LEDs
   for(i=0; i<sizeof(faultLED); i++){
-    digitalWrite(i, LOW); // turn off
+    digitalWrite(faultLED[i], LOW); // turn off
   }
 
   // turn on one-by-one
   for(i=0; i<sizeof(faultLED); i++){
     digitalWrite(i, HIGH); // turn on
     delay(SELFTEST_DELAY);
-    digitalWrite(i, LOW); // turn off
+    digitalWrite(faultLED[i], LOW); // turn off
   }
 
   // test buttons / inputs
@@ -251,7 +250,7 @@ void selfTest(){
 
   // Turn on leds for switch / pot test
   for(i=0; i<sizeof(faultLED); i++){
-    digitalWrite(i, HIGH);
+    digitalWrite(faultLED[i], HIGH);
   }
 
   while(!coastKnobWorking || !brakeKnobWorking || 
@@ -260,7 +259,7 @@ void selfTest(){
     // check rtd button
     if(rtdButtonInitialValue != digitalRead(PIN_RTD_BTN)){
       rtdBtnWorking = true;
-      digitalWrite(PIN_RTD_IND, LOW);
+      digitalWrite(PIN_RTD_LED, LOW);
     }
 
     // check cooling

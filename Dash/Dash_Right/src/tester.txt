@@ -1,0 +1,154 @@
+/**
+ * @author George Spearing
+ * @date April 2021
+ * Testing functionality without CAN
+ */
+
+#include <Arduino.h>
+
+// Input Pins
+#define PIN_COAST A0 // coast regen value
+#define PIN_BRAKE A1 // brake regen value
+#define PIN_DIRECTION A2 // motor direction switch
+#define PIN_COOLING A3 // cooling switch value
+#define PIN_RTD_BTN 3 // input "start button"
+#define PIN_SENSOR_1 8 // extra digital sensor
+
+// output pins
+#define PIN_BMS_LED 4 // bms fault indicator
+#define PIN_IMD_LED 6 // imd fault indicator
+#define PIN_TMS_LED 7 // tms fault indicator BMS HANDELS TEMPERATURE
+#define PIN_RTD_LED 9 // 'start button' LED
+#define PIN_RTD_IND 10 // buzzer (low side mosfet)
+
+// dash Self Test Variables
+#define SELFTEST_DELAY 1000 // time in ms
+#define SELFTESET_POT_WORKING_THRESHOLD 50 // threshold value for pot change
+#define SELFTEST_TIMEOUT 20000 // time in ms
+
+// create array for fault pins
+uint8_t faultLED[] = {PIN_BMS_LED, PIN_IMD_LED, PIN_TMS_LED,
+                  PIN_RTD_LED, PIN_RTD_IND};
+
+#define RTDS_PERIOD 2000
+// RTDS on time (ms)
+uint16_t time_since_rtds_start = 0;
+bool rtds_on = false;
+bool rtdLED_on = false;
+
+
+void selfTest(){
+  // turn off interrupts
+  cli();
+
+  uint8_t i=0; // used for all for loops
+
+  // Turn off LEDs
+  for(i=0; i<sizeof(faultLED); i++){
+    digitalWrite(faultLED[i], LOW); // turn off
+  }
+
+  // turn on one-by-one
+  for(i=0; i<sizeof(faultLED); i++){
+    digitalWrite(faultLED[i], HIGH); // turn on
+    delay(SELFTEST_DELAY);
+    digitalWrite(faultLED[i], LOW); // turn off
+  }
+
+  // test buttons / inputs
+  bool coastKnobWorking = false, brakeKnobWorking = false, 
+  coolingSwitchWorking = false, directionSwitchWorking = false,
+  rtdBtnWorking = false;
+  
+  // only continue once all switches / buttons / knobs have been tested
+
+  uint16_t coastKnobInitialValue = analogRead(PIN_COAST);
+  uint16_t brakeKnobInitialValue = analogRead(PIN_BRAKE);
+  bool coolingSwitchInitialValue = digitalRead(PIN_COOLING);
+  bool directionSwitchInitialValue = digitalRead(PIN_DIRECTION);
+  bool rtdButtonInitialValue = digitalRead(PIN_RTD_BTN);
+
+  // Turn on leds for switch / pot test
+  for(i=0; i<sizeof(faultLED); i++){
+    digitalWrite(faultLED[i], HIGH);
+  }
+
+  while(!coastKnobWorking || !brakeKnobWorking || 
+  !coolingSwitchWorking || !directionSwitchWorking || !rtdBtnWorking){
+
+    // check rtd button
+    if(rtdButtonInitialValue != digitalRead(PIN_RTD_BTN)){
+      rtdBtnWorking = true;
+      digitalWrite(PIN_RTD_LED, LOW);
+    }
+
+    // check cooling
+    if(coolingSwitchInitialValue != digitalRead(PIN_COOLING)){
+      coolingSwitchWorking = true;
+      digitalWrite(PIN_BMS_LED, LOW);
+    }
+
+    // check direction
+    if(directionSwitchInitialValue != digitalRead(PIN_DIRECTION)){
+      directionSwitchWorking = true;
+      digitalWrite(PIN_IMD_LED, LOW);
+    }
+
+    // check pots, both have to change for led to turn off. 
+    if(abs(coastKnobInitialValue-analogRead(PIN_COAST))> SELFTESET_POT_WORKING_THRESHOLD &&
+      abs(brakeKnobInitialValue-analogRead(PIN_BRAKE)) > SELFTESET_POT_WORKING_THRESHOLD){
+      coastKnobWorking = true;
+      brakeKnobWorking = true;
+      digitalWrite(PIN_TMS_LED, LOW);
+    }
+
+    // delay in while loop
+    delay(5); // check every 5 miliseconds
+
+  }
+
+  // reenable interrupts
+  sei();
+
+}
+
+
+void setup() {
+  pinMode(PIN_COAST, INPUT);
+  pinMode(PIN_BRAKE, INPUT);
+  pinMode(PIN_DIRECTION, INPUT);
+  pinMode(PIN_COOLING, INPUT);
+  pinMode(PIN_RTD_BTN, INPUT);
+  pinMode(PIN_SENSOR_1, INPUT);
+
+  pinMode(PIN_BMS_LED, OUTPUT);
+  pinMode(PIN_IMD_LED, OUTPUT);
+  pinMode(PIN_TMS_LED, OUTPUT);
+  pinMode(PIN_RTD_LED, OUTPUT);
+  pinMode(PIN_RTD_IND, OUTPUT);
+
+  selfTest();
+
+//   digitalWrite(PIN_RTD_LED, HIGH);
+// check rtd button
+}
+
+  void loop() {
+
+    //   // write pins
+    //   digitalWrite(PIN_BMS_LED, HIGH);
+    //   delay(1000);
+    //   digitalWrite(PIN_IMD_LED, HIGH);
+    //   delay(1000);
+    //   digitalWrite(PIN_TMS_LED, HIGH);
+    //   delay(1000);
+
+    //   digitalWrite(PIN_BMS_LED, LOW);
+    //   delay(1000);
+    //   digitalWrite(PIN_IMD_LED, LOW);
+    //   delay(1000);
+    //   digitalWrite(PIN_TMS_LED, LOW);
+    //   delay(1000);
+      
+
+}
