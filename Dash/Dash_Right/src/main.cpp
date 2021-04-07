@@ -230,7 +230,7 @@ void selfTest(){
 
   // turn on one-by-one
   for(i=0; i<sizeof(faultLED); i++){
-    digitalWrite(i, HIGH); // turn on
+    digitalWrite(faultLED[i], HIGH); // turn on
     delay(SELFTEST_DELAY);
     digitalWrite(faultLED[i], LOW); // turn off
   }
@@ -249,7 +249,7 @@ void selfTest(){
   bool rtdButtonInitialValue = digitalRead(PIN_RTD_BTN);
 
   // Turn on leds for switch / pot test
-  for(i=0; i<sizeof(faultLED); i++){
+  for(i=0; i<sizeof(faultLED-1); i++){
     digitalWrite(faultLED[i], HIGH);
   }
 

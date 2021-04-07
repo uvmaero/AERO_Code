@@ -21,7 +21,7 @@ MCP_CAN CAN(PIN_SPI_CAN_CS); // set CS Pin for CAN
 #define BMS_IND 7
 
 // default fault states
-// "1" is faulted, "0" is clear
+
 uint16_t BMS_FAULT = 1; // BMS
 // uint16_t TMS1_FAULT = 1; // Temp for Pack 1
 // uint16_t TMS2_FAULT = 1; // Temp for Pack 2
@@ -37,9 +37,9 @@ void sendDaqData(){
   cli();
 
   uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bufToSend[0] = BMS_FAULT;
+  bufToSend[0] = !BMS_FAULT; // BMS Faults Low, send inverse state
 //   bufToSend[1] = TMS1_FAULT && TMS2_FAULT;
-  bufToSend[2] = IMD_FAULT;
+  bufToSend[2] = IMD_FAULT; // IMD faults High, send true state
 
   // send message
   CAN.sendMsgBuf(ID_FAULTLATCHER_FAULTS, 0, 8, bufToSend);

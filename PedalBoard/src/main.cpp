@@ -28,8 +28,8 @@ MCP_CAN CAN(PIN_SPI_CAN_CS); // set CS Pin
 
 // CAN Address
 #define ID_PEDAL_BASE         0x30
-#define ID_PEDAL_DATA         ID_PEDAL_BASE + 1 // 0X32
-#define ID_PEDAL_SET_EEPROM   ID_PEDAL_BASE + 2 // 0X33
+#define ID_PEDAL_DATA         ID_PEDAL_BASE + 1 // 0X31
+#define ID_PEDAL_SET_EEPROM   ID_PEDAL_BASE + 2 // 0X32
 
 #define ID_RINEHART_COMMAND 0xC0 // send for torque commands
 
@@ -162,13 +162,13 @@ void sendDaqData(){
 // turn off interrupts
   cli();
 
-//   sampleACC();
+  sampleACC();
 //   sampleBrake();
 
   // build DAQ Message
   uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bufToSend[0] = 0; //wheel_left;
-  bufToSend[1] = 0; //wheel_right;
+  bufToSend[0] = pedal0; //wheel_left;
+  bufToSend[1] = pedal1; //wheel_right;
   bufToSend[2] = 0; //damper_left;
   bufToSend[3] = 0; //damper_right;
   bufToSend[4] = 0; //steer_mapped;
