@@ -160,6 +160,10 @@ void loop() {
     filterCAN(id, buf);
   }
 
+  if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
+       sendDaqData();
+   }
+
   // // LED indicators
   // digitalWrite(PIN_RTD_LED, rtdLED_on); // start button light
   
@@ -385,24 +389,24 @@ void buttonChange(){
 }
 
 // 10Hz Timer Interrupt -- Precharge Control
-ISR(TIMER1_COMPA_vect){ // check if it's timer one or whatnot
+// ISR(TIMER1_COMPA_vect){ // check if it's timer one or whatnot
 
-  // control precharge status
-  control_precharge();
+//   // control precharge status
+//   control_precharge();
 
-  // if precharge done, light up start button
-  if(!ready_to_drive && precharge_state == PRECHARGE_DONE){
-    digitalWrite(PIN_RTD_LED, rtdLED_on);
-  }
+//   // if precharge done, light up start button
+//   if(!ready_to_drive && precharge_state == PRECHARGE_DONE){
+//     digitalWrite(PIN_RTD_LED, rtdLED_on);
+//   }
 
-  // if start button is then pressed, sound buzzer, increment buzzer time
-  if(rtds_on && time_since_rtds_start <= RTDS_PERIOD && precharge_state == PRECHARGE_DONE){
-    time_since_rtds_start += 100;
-  }
-  // if precharge done, and buzzer done, turn on HV (ready to drive)
-  if(rtds_on && precharge_state==PRECHARGE_DONE && time_since_rtds_start > RTDS_PERIOD){
-    rtds_on = false; // trun off buzzer
-    ready_to_drive = true; // now we're ready to drive (for pedal board)
-  }
+//   // if start button is then pressed, sound buzzer, increment buzzer time
+//   if(rtds_on && time_since_rtds_start <= RTDS_PERIOD && precharge_state == PRECHARGE_DONE){
+//     time_since_rtds_start += 100;
+//   }
+//   // if precharge done, and buzzer done, turn on HV (ready to drive)
+//   if(rtds_on && precharge_state==PRECHARGE_DONE && time_since_rtds_start > RTDS_PERIOD){
+//     rtds_on = false; // trun off buzzer
+//     ready_to_drive = true; // now we're ready to drive (for pedal board)
+//   }
 
-}
+// }

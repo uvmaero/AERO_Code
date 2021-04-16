@@ -19,7 +19,7 @@ uint16_t lastSendDaqMessage = millis();
 #define ID_BASE 0x01
 #define ID_REAR_DAQ_DATA ID_BASE + 1 // send data on this address
 #define ID_DASH_RIGHT_DATA 0x74 // receive data from dash
-#define ID_FRONT_PEDALBOARD 0x37 // receive data from pedal
+#define ID_FRONT_PEDALBOARD 0x31 // receive data from pedal
 
 // Input Pins
 #define PIN_WHEEL_L A0
