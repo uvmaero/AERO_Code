@@ -10,6 +10,7 @@
 #include <Arduino.h>
 #include <EEPROM.h>
 #include <mcp_can.h>
+#include <SPI.h>
 
 // CAN initilization
 #define PIN_SPI_CAN_CS 5
@@ -45,6 +46,7 @@ MCP_CAN CAN(PIN_SPI_CAN_CS); // set CS Pin
 // default settings
 #define PEDAL_DEADBAND 10 // lower limit for '0' value
 #define ACC_MAX_SKEW 10 // acc pedal difference limit
+
 // following vlaues based on testing. Can be updated using ID_PEDAL_SET_EEPROM id
 uint16_t pedal0_min = 90; // analog read min
 uint16_t pedal0_max = 430; // analog read max
@@ -136,8 +138,6 @@ void setup() {
 }
 
 void loop() {
-
-
     // initialize CAN buffers
     unsigned long id; 
     unsigned char len = 0; 
@@ -145,25 +145,25 @@ void loop() {
 
     // send Daq
     if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
-    sendDaqData();
+      sendDaqData();
     }
 
   // read CANbus for incomming messages
-    // if(CAN_MSGAVAIL == CAN.checkReceive()){
-    //     CAN.readMsgBuf(&id, &len, buf);
-    //     filterCAN(id, buf);
-    // }
+    if(CAN_MSGAVAIL == CAN.checkReceive()){
+        CAN.readMsgBuf(&id, &len, buf);
+        filterCAN(id, buf);
+    }
   
 }
 
 // create and send Data CAN Message
 void sendDaqData(){
 
-// turn off interrupts
+  // turn off interrupts
   cli();
 
   sampleACC();
-//   sampleBrake();
+  sampleBrake();
 
   // build DAQ Message
   uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
@@ -172,7 +172,7 @@ void sendDaqData(){
   bufToSend[2] = 0; //damper_left;
   bufToSend[3] = 0; //damper_right;
   bufToSend[4] = 0; //steer_mapped;
-  bufToSend[5] = 0; //brake_avg;
+  bufToSend[5] = brake0; //brake_avg or break bool, sending the brake analog for testing/configuration;
   bufToSend[6] = 0; //pedal_avg;
 
   // send message
@@ -186,11 +186,19 @@ void sendDaqData(){
 
 }
 
-void sampleBrake(){
-  brake0 = analogRead(PIN_BRAKE0);
-  brake1 = analogRead(PIN_BRAKE1);
+// float convertPressure(int sensorData) {
+//   if(sensorData <= 102) 
+//     return 0;
+//   else
+//     return (sensorData - 0.1*(1024))/((0.8*(1024))/(15));
+// }
+
+void sampleBrake() {
+  brake0 = (analogRead(PIN_BRAKE0)*5.0)/1024.0;
+  // brake1 = analogRead(PIN_BRAKE1);
 
   // map break0 to pressures
+  brake0_mapped = map(brake0, 203, 208, 0, 256);
 
   // map break1 to pressures 
 
@@ -199,8 +207,6 @@ void sampleBrake(){
   // setup bool variable for break light?
 
 }
-
-
 
 // accerlator pedal sampling and comapring
 void sampleACC(){
@@ -219,7 +225,6 @@ void sampleACC(){
 
   // average pedal values
   pedal_avg = (pedal0_mapped/2)+(pedal1_mapped/2);
-
 }
 
 
