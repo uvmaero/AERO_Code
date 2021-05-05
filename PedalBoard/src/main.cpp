@@ -118,23 +118,37 @@ void setup() {
   CAN.begin(MCP_ANY, CAN_500KBPS, MCP_16MHZ);
   CAN.setMode(MCP_NORMAL);
 
-//   cli();
+  // Disable interrupts
+  cli();
 
-//   //set timer1 interrupt at 100Hz
-//   TCCR1A = 0;// set entire TCCR1A register to 0
-//   TCCR1B = 0;// same for TCCR1B
-//   TCNT1  = 0;//initialize counter value to 0
-//   // set compare match register for 10hz increments
-//   OCR1A = 156.25;// = (16*10^6) / (1*10240) - 1 (must be <65536)
-//   // turn on CTC mode
-//   TCCR1B |= (1 << WGM12);
-//   // Set CS12 and CS10 bits for 10240 prescaler
-//   TCCR1B |= (1 << CS12) | (1 << CS10);  
-//   // enable timer compare interrupt
-//   TIMSK1 |= (1 << OCIE1A);
+  // Reset control registers
+  TCCR2A = 0;
+  TCCR2B = 0;
 
-//   sei();
+  // Clear Timer on Compare Match (CTC) Mode
+  TCCR2A |= (1 << WGM21);
+  TCCR2B |= (1 << CS12); // Prescaler x4
+  ASSR &= ~(1 << AS2); // Use system clock for Timer/Counter2
 
+  // Interrupt every 1/8e6 * 2^8 * 256 = 8ms * 6.2 = ~50ms
+  OCR2A = 6.2;
+
+  // Reset Timer/Counter2 Interrupt Mask Register
+  TIMSK2 = 0;
+
+  // Enable Output Compare Match A Interrupt
+  TIMSK2 |= (1 << OCIE2A);
+
+  // // Set up time based interrupt on second timer register
+	// TIMSK2 = (TIMSK2 & B11111001) | 0x02; // Enables compare A interrupt on the TIMSK2 register
+  // TCCR2B = (TCCR2B & B11111000) | 0x03; // 1khz (1ms) -> (1/8000000) * 2^8 * 32 (0x03 scaler)
+  // OCR2A = 50; // 50 counts of 1ms = 50ms
+  
+  sei(); // Enable interrupts
+}
+
+ISR(TIMER2_COMPA_vect){
+  sendRinehartCommand();
 }
 
 void loop() {
@@ -227,7 +241,6 @@ void sampleACC(){
   pedal_avg = (pedal0_mapped/2)+(pedal1_mapped/2);
 }
 
-
 // filter CAN messages
 void filterCAN(unsigned long canID, unsigned char buf[8]){
   switch(canID){
@@ -264,7 +277,6 @@ void setEERPOM(){
 
 // create and send Data CAN Message
 void sendRinehartCommand(){
-
   // get current pedal value
   sampleACC();
 
