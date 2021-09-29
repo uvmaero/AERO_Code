@@ -178,6 +178,10 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
       digitalWrite(PIN_TMS_LED, buf[1]);
       digitalWrite(PIN_IMD_LED, buf[2]);
       break;
+
+    case ID_RINEHART_VOLTAGE:
+      // rinehart_voltage = buf[0];
+      break;
   }
 }
 
@@ -344,11 +348,16 @@ void control_precharge(){
       ready_to_drive = false;
 
       // check voltages, if above threashold, then precharge is done
-      
+      if (rinehart_voltage >= (emus_voltage * 0.9)) {
+
         // turn on Start button led
         rtdLED_on = true;
+
         // switch to PRECHARGE DONE
         set_precharge_state(PRECHARGE_DONE);
+
+      }
+
     break;
 
 
