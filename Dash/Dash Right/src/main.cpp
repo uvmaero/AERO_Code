@@ -349,23 +349,24 @@ void control_precharge(){
         rtdLED_on = true;
         // switch to PRECHARGE DONE
         set_precharge_state(PRECHARGE_DONE);
+    break;
 
 
     // PRECHARGE DONE
-
+    case PRECHARGE_DONE:
       // If just entered, turn off outputs
 
       // if TMS is not on, switch to PRECHARGE OFF
-
+    break;
 
     // PRECHARGE_ERROR
-
+    PRECHARGE_ERROR:
       // Turn off rinehart outputs
 
       // vehicle not ready to drive
 
       // If both devices have been heard from, return to PRECHARGE OFF
-
+    break;
   } // end switch
 
   // Increment emus missed messages
