@@ -365,6 +365,9 @@ void control_precharge(){
     case PRECHARGE_DONE:
       // If just entered, turn off outputs
 
+      // the car is ready to drive
+      ready_to_drive = true;
+
       // if TMS is not on, switch to PRECHARGE OFF
     break;
 
