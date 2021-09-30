@@ -180,7 +180,12 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
       break;
 
     case ID_RINEHART_VOLTAGE:
-      // rinehart_voltage = buf[0];
+      // some temporary variables for bit shifting
+      char firstByte = buf[0];
+      char secondByte = buf[1];
+
+      // shift those bits!
+      rinehart_voltage = (firstByte << 8) | secondByte;
       break;
   }
 }
