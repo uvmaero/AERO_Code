@@ -37,11 +37,11 @@ const int numCols = 16; // LCD number of columns
 int buttonState = HIGH;
 uint8_t numMenuOptions = 2;
 uint16_t lastDebounceTime = 0;
-uint16_t debounce = 50;
+uint16_t debounce = 200;
 uint8_t lastMenuState = 0;
 uint8_t buttonMenuState = 0;
 uint16_t lcdUpdateInterval = 500; // time in ms
-uint16_t lastLCDUpdate;
+uint16_t lastLCDUpdate = 0;
 
 
 // Initialize LED Chip
@@ -240,6 +240,7 @@ void loop() {
     // update screen if time to
     if (millis() - lastLCDUpdate > lcdUpdateInterval){
         print_to_lcd(buttonMenuState);
+        lastLCDUpdate= millis();
     }
 
     // check the button, update menu option

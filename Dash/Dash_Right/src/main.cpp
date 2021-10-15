@@ -23,7 +23,8 @@ uint16_t lastSendDaqMessage = millis();
 #define ID_DASH_SELF_TEST   ID_BASE +1
 #define ID_DASH_STATUS      ID_BASE +2
 #define ID_DASH_RIGHT_DATA  ID_BASE +3
-
+#define ID_RINEHART_VOLTAGE  0xA7
+#define ID_RINEHART_RELAY   0xC1
 #define ID_FAULTLATCHER 0x80 // receive faults
 
 // Input Pins
@@ -40,6 +41,7 @@ uint16_t lastSendDaqMessage = millis();
 #define PIN_TMS_LED 7 // tms fault indicator BMS HANDELS TEMPERATURE
 #define PIN_RTD_LED 9 // 'start button' LED
 #define PIN_RTD_IND 10 // buzzer (low side mosfet)
+
 // create array for fault pins
 uint8_t faultLED[] = {PIN_BMS_LED, PIN_IMD_LED, PIN_TMS_LED,
                   PIN_RTD_LED, PIN_RTD_IND};
@@ -66,6 +68,7 @@ uint8_t brake_mapped;
 bool ready_to_drive = false; // ready to drive, precharge done, buzzer done
 // bool rtds_on = false; // buzzer sound
 bool precharge_state_enter = false; // state change
+bool no_faults = false; // there is no faults active from fault latcher
 
 // precharge State
 enum precharge_state_enum {
@@ -74,11 +77,15 @@ enum precharge_state_enum {
   PRECHARGE_DONE,
   PRECHARGE_ERROR
 };
-precharge_state_enum precharge_state = PRECHARGE_OFF;
+precharge_state_enum precharge_state = PRECHARGE_ERROR;
 
 // precharge coefficient -- rinehart voltage must be more than emus voltage * coefficient
 // in order to finish precharge
 #define PRECHARGE_COEFFICIENT 0.9
+
+// precharge done relay message 
+// a toggle for sending the message that closes main contactors
+int relayMsgToggle = 0;   // 0 means not sent yet
 
 // Maximum number of missed messages before canceling precharge
 #define MAX_MISSED_EMUS_MESSAGES 10
@@ -97,7 +104,7 @@ uint8_t cycles_since_last_rinehart_message = MAX_MISSED_RINEHART_MESSAGES;
 
 // voltages
 // NOTE: hardcoded voltage, should be taken from CAN data
-uint16_t emus_voltage = 265.0;  
+uint16_t emus_voltage = 2650;  
 uint16_t rinehart_voltage = 0;
 
 // function declarations
@@ -148,7 +155,6 @@ void setup() {
 }
 
 void loop() {
-
   // initialize CAN buffers
   unsigned long id; 
   unsigned char len = 0; 
@@ -178,8 +184,14 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
       break;
     case ID_FAULTLATCHER:
       digitalWrite(PIN_BMS_LED, buf[0]);
-    //   digitalWrite(PIN_TMS_LED, buf[1]);
+      // digitalWrite(PIN_TMS_LED, buf[1]);
       digitalWrite(PIN_IMD_LED, buf[2]);
+      no_faults = ! (buf[0] | buf[2]);
+      break;
+    case ID_RINEHART_VOLTAGE:
+      int tmp;
+      tmp = (buf[1] <<8 ) | (buf[0]);
+      rinehart_voltage = tmp; 
       break;
   }
 }
@@ -283,7 +295,7 @@ void selfTest(){
       abs(brakeKnobInitialValue-analogRead(PIN_BRAKE)) > SELFTESET_POT_WORKING_THRESHOLD){
       coastKnobWorking = true;
       brakeKnobWorking = true;
-      digitalWrite(PIN_TMS_LED, LOW);
+      //digitalWrite(PIN_TMS_LED, LOW);
     }
 
     // delay in while loop
@@ -312,12 +324,12 @@ void control_precharge(){
 
   // missed too many rinehart messages = ERROR
   if(cycles_since_last_rinehart_message >= MAX_MISSED_RINEHART_MESSAGES){
-    precharge_state = PRECHARGE_ERROR;
+   // precharge_state = PRECHARGE_ERROR;
   }
 
   // missed too many emus messages = ERROR
   if(cycles_since_last_emus_message >= MAX_MISSED_EMUS_MESSAGES){
-    precharge_state = PRECHARGE_ERROR;
+    //precharge_state = PRECHARGE_ERROR;
   }
 
   // switch precharge state
@@ -325,11 +337,14 @@ void control_precharge(){
 
     // PRECHARGE OFF 
     case(PRECHARGE_OFF):
-
       // turn off rinehart outputs
 
       // vehicle not ready to drive
       ready_to_drive = false;
+      relayMsgToggle = 0;
+      if(no_faults)
+        set_precharge_state(PRECHARGE_ON);
+
 
       // if TMS is still ready, try PRECHARGE Again 
 
@@ -338,36 +353,100 @@ void control_precharge(){
 
     // PRECHARGE ON
     case(PRECHARGE_ON):
-
+      digitalWrite(PIN_TMS_LED, 1);
       // try to precharge rinehart
-
+      if (1) {
+      unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+      bufToSend[0] = 0;   // address is spread across
+      bufToSend[1] = 1;   // these two bits
+      bufToSend[2] = 1;   // set mode to write
+      bufToSend[3] = 0;   // this one doesn't matter (NA bit)
+      bufToSend[4] = 1;  // turning on the main relay and precharge
+      bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+      bufToSend[6] = 0;   // NA bit 
+      bufToSend[7] = 0;   // NA bit 
+      
+      // send message
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
       // if TMS is not ready, go to PRECHARGE OFF
-
+      }
       // vechile not ready to drive (yet)
       ready_to_drive = false;
+      //digitalWrite(PIN_TMS_LED, 1);
 
       // check voltages, if above threashold, then precharge is done
+      if (rinehart_voltage >= (emus_voltage * 0.9)) {
       
         // turn on Start button led
         rtdLED_on = true;
         // switch to PRECHARGE DONE
         set_precharge_state(PRECHARGE_DONE);
+      }
+      //add time interval if not charged fast enough to error out
+      else
+      {
+        
+      }
+      
+      break;
 
 
     // PRECHARGE DONE
+    case PRECHARGE_DONE:
 
+      if (relayMsgToggle == 0) {
+        // build DAQ Message
+        unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        bufToSend[0] = 0;   // address is spread across
+        bufToSend[1] = 1;   // these two bits
+        bufToSend[2] = 1;   // set mode to write
+        bufToSend[3] = 0;   // this one doesn't matter (NA bit)
+        bufToSend[4] = 3;  // turning on the main relay and precharge
+        bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+        bufToSend[6] = 0;   // NA bit 
+        bufToSend[7] = 0;   // NA bit 
+
+      // send message
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
+    
+      // toggle the var so we don't keep sending this message
+      relayMsgToggle = 1;   // 1 is off
+    }
       // If just entered, turn off outputs
+      
+      // turn on led
+      digitalWrite(PIN_TMS_LED, 0);
 
       // if TMS is not on, switch to PRECHARGE OFF
 
+      // send 
+    break;
 
     // PRECHARGE_ERROR
+    case PRECHARGE_ERROR:
+    //digitalWrite(PIN_TMS_LED, 1);
 
       // Turn off rinehart outputs
+      // build DAQ Message
+      unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+      bufToSend[0] = 0;   // address is spread across
+      bufToSend[1] = 1;   // these two bits
+      bufToSend[2] = 1;   // set mode to write
+      bufToSend[3] = 0;   // this one doesn't matter (NA bit)
+      bufToSend[4] = 0;  // turning on the main relay and precharge
+      bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+      bufToSend[6] = 0;   // NA bit 
+      bufToSend[7] = 0;   // NA bit 
+
+      // send message
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
 
       // vehicle not ready to drive
+      ready_to_drive = false;
 
       // If both devices have been heard from, return to PRECHARGE OFF
+      set_precharge_state(PRECHARGE_OFF);
+      break;
 
   } // end switch
 
@@ -377,7 +456,9 @@ void control_precharge(){
 
   // send precharge message
 
-} // end control_precharge
+  // end control_precharge
+}
+
 
 // button interrupt, change state and activate buzzer
 void buttonChange(){
@@ -410,3 +491,24 @@ void buttonChange(){
 //   }
 
 // }
+ISR(TIMER1_COMPA_vect){ // check if it's timer one or whatnot
+
+  // control precharge status
+  control_precharge();
+
+  // if precharge done, light up start button
+  if(!ready_to_drive && precharge_state == PRECHARGE_DONE){
+    digitalWrite(PIN_RTD_LED, rtdLED_on);
+  }
+
+  // if start button is then pressed, sound buzzer, increment buzzer time
+  if(rtds_on && time_since_rtds_start <= RTDS_PERIOD && precharge_state == PRECHARGE_DONE){
+    time_since_rtds_start += 100;
+  }
+  // if precharge done, and buzzer done, turn on HV (ready to drive)
+   if(rtds_on && precharge_state==PRECHARGE_DONE && time_since_rtds_start > RTDS_PERIOD){
+    rtds_on = false; // trun off buzzer
+    ready_to_drive = true; // now we're ready to drive (for pedal board)
+  }
+
+}

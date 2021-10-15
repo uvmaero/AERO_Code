@@ -48,10 +48,11 @@ MCP_CAN CAN(PIN_SPI_CAN_CS); // set CS Pin
 #define ACC_MAX_SKEW 10 // acc pedal difference limit
 
 // following vlaues based on testing. Can be updated using ID_PEDAL_SET_EEPROM id
-uint16_t pedal0_min = 90; // analog read min
-uint16_t pedal0_max = 430; // analog read max
-uint16_t pedal1_min = 190; // analog read min
-uint16_t pedal1_max = 870; // analog read max
+uint16_t pedal0_min = 150; // analog read min
+uint16_t pedal0_max = 870; // analog read max
+
+uint16_t pedal1_min = 70; // analog read min
+uint16_t pedal1_max = 430; // analog read max
 uint16_t max_torque = 50; // hard coded default, can be updated over can
 
 #define BRAKE_THRESHOLD 500 // amount of pressure change for brake
@@ -63,10 +64,10 @@ int16_t brake_torque = 0; // value for regen brake
 // acc raw ADC values from sensors
 uint16_t pedal0 = 0, pedal1 = 0, brake0 = 0, brake1 = 0, steer = 0;
 // mapped values
-uint8_t pedal0_mapped, pedal1_mapped, brake0_mapped, brake1_mapped, steer_mapped,
+uint16_t pedal0_mapped, pedal1_mapped, brake0_mapped, brake1_mapped, steer_mapped,
         pedal_avg, brake_avg;
 
-#define DAQ_CAN_INTERVAL 100 // time in ms
+#define DAQ_CAN_INTERVAL 50 // time in ms (HACK: multiplied by 10 so currently at 20 hz, kinda wierd)
 uint16_t lastSendDaqMessage = millis();
 
 // default values (updated from DASH)
@@ -118,33 +119,33 @@ void setup() {
   CAN.begin(MCP_ANY, CAN_500KBPS, MCP_16MHZ);
   CAN.setMode(MCP_NORMAL);
 
-  // Disable interrupts
-  cli();
+  // // Disable interrupts
+  // cli();
 
-  // Reset control registers
-  TCCR2A = 0;
-  TCCR2B = 0;
+  // // Reset control registers
+  // TCCR2A = 0;
+  // TCCR2B = 0;
 
-  // Clear Timer on Compare Match (CTC) Mode
-  TCCR2A |= (1 << WGM21);
-  TCCR2B |= (1 << CS12); // Prescaler x4
-  ASSR &= ~(1 << AS2); // Use system clock for Timer/Counter2
+  // // Clear Timer on Compare Match (CTC) Mode
+  // TCCR2A |= (1 << WGM21);
+  // TCCR2B |= (1 << CS12); // Prescaler x4
+  // ASSR &= ~(1 << AS2); // Use system clock for Timer/Counter2
 
-  // Interrupt every 1/8e6 * 2^8 * 256 = 8ms * 6.2 = ~50ms
-  OCR2A = 6.2;
+  // // Interrupt every 1/8e6 * 2^8 * 256 = 8ms * 6.2 = ~50ms
+  // OCR2A = 6.2;
 
-  // Reset Timer/Counter2 Interrupt Mask Register
-  TIMSK2 = 0;
+  // // Reset Timer/Counter2 Interrupt Mask Register
+  // TIMSK2 = 0;
 
-  // Enable Output Compare Match A Interrupt
-  TIMSK2 |= (1 << OCIE2A);
+  // // Enable Output Compare Match A Interrupt
+  // TIMSK2 |= (1 << OCIE2A);
 
-  // // Set up time based interrupt on second timer register
-	// TIMSK2 = (TIMSK2 & B11111001) | 0x02; // Enables compare A interrupt on the TIMSK2 register
-  // TCCR2B = (TCCR2B & B11111000) | 0x03; // 1khz (1ms) -> (1/8000000) * 2^8 * 32 (0x03 scaler)
-  // OCR2A = 50; // 50 counts of 1ms = 50ms
+  // // // Set up time based interrupt on second timer register
+	// // TIMSK2 = (TIMSK2 & B11111001) | 0x02; // Enables compare A interrupt on the TIMSK2 register
+  // // TCCR2B = (TCCR2B & B11111000) | 0x03; // 1khz (1ms) -> (1/8000000) * 2^8 * 32 (0x03 scaler)
+  // // OCR2A = 50; // 50 counts of 1ms = 50ms
   
-  sei(); // Enable interrupts
+  // sei(); // Enable interrupts
 }
 
 ISR(TIMER2_COMPA_vect){
@@ -156,10 +157,10 @@ void loop() {
     unsigned long id; 
     unsigned char len = 0; 
     unsigned char buf[8];
-
     // send Daq
     if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
-      sendDaqData();
+    sendDaqData();
+    sendRinehartCommand();
     }
 
   // read CANbus for incomming messages
@@ -181,8 +182,8 @@ void sendDaqData(){
 
   // build DAQ Message
   uint8_t bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bufToSend[0] = pedal0; //wheel_left;
-  bufToSend[1] = pedal1; //wheel_right;
+  bufToSend[0] = pedal0_mapped; //wheel_left;
+  bufToSend[1] = pedal1_mapped; //wheel_right;
   bufToSend[2] = 0; //damper_left;
   bufToSend[3] = 0; //damper_right;
   bufToSend[4] = 0; //steer_mapped;
