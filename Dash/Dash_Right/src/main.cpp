@@ -112,6 +112,7 @@ void selfTest();
 void filterCAN(unsigned long canID, unsigned char buf[8]); 
 void sendDaqData(); 
 void buttonChange();
+void control_precharge();
 
 void setup() {
   pinMode(PIN_COAST, INPUT);
@@ -168,6 +169,7 @@ void loop() {
 
   if(millis() > (lastSendDaqMessage + DAQ_CAN_INTERVAL)){
        sendDaqData();
+       control_precharge();
    }
 
   // // LED indicators
@@ -356,18 +358,18 @@ void control_precharge(){
       digitalWrite(PIN_TMS_LED, 1);
       // try to precharge rinehart
       if (1) {
-      unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-      bufToSend[0] = 0;   // address is spread across
-      bufToSend[1] = 1;   // these two bits
-      bufToSend[2] = 1;   // set mode to write
-      bufToSend[3] = 0;   // this one doesn't matter (NA bit)
-      bufToSend[4] = 1;  // turning on the main relay and precharge
-      bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
-      bufToSend[6] = 0;   // NA bit 
-      bufToSend[7] = 0;   // NA bit 
+      unsigned char bufToSend0[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+      bufToSend0[0] = 1;   // address is spread across
+      bufToSend0[1] = 0;   // these two bits
+      bufToSend0[2] = 1;   // set mode to write
+      bufToSend0[3] = 0;   // this one doesn't matter (NA bit)
+      bufToSend0[4] = 1;  // turning on the main relay and precharge
+      bufToSend0[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+      bufToSend0[6] = 0;   // NA bit 
+      bufToSend0[7] = 0;   // NA bit 
       
       // send message
-      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend0);
       // if TMS is not ready, go to PRECHARGE OFF
       }
       // vechile not ready to drive (yet)
@@ -396,18 +398,18 @@ void control_precharge(){
 
       if (relayMsgToggle == 0) {
         // build DAQ Message
-        unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-        bufToSend[0] = 0;   // address is spread across
-        bufToSend[1] = 1;   // these two bits
-        bufToSend[2] = 1;   // set mode to write
-        bufToSend[3] = 0;   // this one doesn't matter (NA bit)
-        bufToSend[4] = 3;  // turning on the main relay and precharge
-        bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
-        bufToSend[6] = 0;   // NA bit 
-        bufToSend[7] = 0;   // NA bit 
+        unsigned char bufToSend1[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+        bufToSend1[0] = 1;   // address is spread across
+        bufToSend1[1] = 0;   // these two bits
+        bufToSend1[2] = 1;   // set mode to write
+        bufToSend1[3] = 0;   // this one doesn't matter (NA bit)
+        bufToSend1[4] = 3;  // turning on the main relay and precharge
+        bufToSend1[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+        bufToSend1[6] = 0;   // NA bit 
+        bufToSend1[7] = 0;   // NA bit 
 
       // send message
-      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend1);
     
       // toggle the var so we don't keep sending this message
       relayMsgToggle = 1;   // 1 is off
@@ -418,6 +420,10 @@ void control_precharge(){
       digitalWrite(PIN_TMS_LED, 0);
 
       // if TMS is not on, switch to PRECHARGE OFF
+      if (rinehart_voltage < (emus_voltage * 0.6)) {
+        // switch to PRECHARGE DONE
+        set_precharge_state(PRECHARGE_ERROR);
+      }
 
       // send 
     break;
@@ -428,18 +434,18 @@ void control_precharge(){
 
       // Turn off rinehart outputs
       // build DAQ Message
-      unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-      bufToSend[0] = 0;   // address is spread across
-      bufToSend[1] = 1;   // these two bits
-      bufToSend[2] = 1;   // set mode to write
-      bufToSend[3] = 0;   // this one doesn't matter (NA bit)
-      bufToSend[4] = 0;  // turning on the main relay and precharge
-      bufToSend[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
-      bufToSend[6] = 0;   // NA bit 
-      bufToSend[7] = 0;   // NA bit 
+      unsigned char bufToSend2[8] = {0, 0, 0, 0, 0, 0, 0, 0};
+      bufToSend2[0] = 1;   // address is spread across
+      bufToSend2[1] = 0;   // these two bits
+      bufToSend2[2] = 1;   // set mode to write
+      bufToSend2[3] = 0;   // this one doesn't matter (NA bit)
+      bufToSend2[4] = 0;  // turning on the main relay and precharge
+      bufToSend2[5] = 85;  // is spread across these two as well, to do both the value needs to be 0x5503
+      bufToSend2[6] = 0;   // NA bit 
+      bufToSend2[7] = 0;   // NA bit 
 
       // send message
-      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend);
+      CAN.sendMsgBuf(ID_RINEHART_RELAY, 0, 8, bufToSend2);
 
       // vehicle not ready to drive
       ready_to_drive = false;
@@ -494,7 +500,7 @@ void buttonChange(){
 ISR(TIMER1_COMPA_vect){ // check if it's timer one or whatnot
 
   // control precharge status
-  control_precharge();
+  // control_precharge();
 
   // if precharge done, light up start button
   if(!ready_to_drive && precharge_state == PRECHARGE_DONE){

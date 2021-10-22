@@ -48,11 +48,11 @@ MCP_CAN CAN(PIN_SPI_CAN_CS); // set CS Pin
 #define ACC_MAX_SKEW 10 // acc pedal difference limit
 
 // following vlaues based on testing. Can be updated using ID_PEDAL_SET_EEPROM id
-uint16_t pedal0_min = 150; // analog read min
-uint16_t pedal0_max = 870; // analog read max
+uint16_t pedal0_min = 140; // analog read min
+uint16_t pedal0_max = 770; // analog read max
 
-uint16_t pedal1_min = 70; // analog read min
-uint16_t pedal1_max = 430; // analog read max
+uint16_t pedal1_min = 60; // analog read min
+uint16_t pedal1_max = 370; // analog read max
 uint16_t max_torque = 50; // hard coded default, can be updated over can
 
 #define BRAKE_THRESHOLD 500 // amount of pressure change for brake
@@ -67,7 +67,7 @@ uint16_t pedal0 = 0, pedal1 = 0, brake0 = 0, brake1 = 0, steer = 0;
 uint16_t pedal0_mapped, pedal1_mapped, brake0_mapped, brake1_mapped, steer_mapped,
         pedal_avg, brake_avg;
 
-#define DAQ_CAN_INTERVAL 50 // time in ms (HACK: multiplied by 10 so currently at 20 hz, kinda wierd)
+#define DAQ_CAN_INTERVAL 100 // time in ms 
 uint16_t lastSendDaqMessage = millis();
 
 // default values (updated from DASH)
@@ -149,7 +149,7 @@ void setup() {
 }
 
 ISR(TIMER2_COMPA_vect){
-  sendRinehartCommand();
+  //sendRinehartCommand();
 }
 
 void loop() {
@@ -188,7 +188,7 @@ void sendDaqData(){
   bufToSend[3] = 0; //damper_right;
   bufToSend[4] = 0; //steer_mapped;
   bufToSend[5] = brake0; //brake_avg or break bool, sending the brake analog for testing/configuration;
-  bufToSend[6] = 0; //pedal_avg;
+  bufToSend[6] = commanded_torque/10; //pedal_avg;
 
   // send message
   CAN.sendMsgBuf(ID_PEDAL_DATA, 0, 8, bufToSend);
@@ -228,18 +228,16 @@ void sampleACC(){
   pedal0 = analogRead(PIN_ACC0);
   pedal1 = analogRead(PIN_ACC1);
 
+  // if (pedal0>pedal0_max) pedal0_max=pedal0;
+  // if (pedal0<pedal0_min) pedal0_min=pedal0;
+  // if (pedal1>pedal1_max) pedal1_max=pedal1;
+  // if (pedal1<pedal1_min) pedal1_min=pedal1;
+
   pedal0_mapped = map(pedal0, pedal0_min, pedal0_max, 0, 255);
   pedal1_mapped = map(pedal1, pedal1_min, pedal1_max, 0, 255);
 
-  // check skew value, map to 0 if something is wrong
-  if((pedal0_mapped/2+pedal1_mapped/2) >
-    (pedal0+ACC_MAX_SKEW || pedal1+ACC_MAX_SKEW)){
-    pedal0_mapped = 0;
-    pedal1_mapped = 0;
-  }
-
   // average pedal values
-  pedal_avg = (pedal0_mapped/2)+(pedal1_mapped/2);
+  pedal_avg = (pedal0_mapped+pedal1_mapped)/2;
 }
 
 // filter CAN messages
@@ -251,7 +249,7 @@ void filterCAN(unsigned long canID, unsigned char buf[8]){
         ready_to_drive = buf[3];
         direction = buf[4];
       break;
-  
+
     case ID_PEDAL_SET_EEPROM: // set pedal values and torque limit over can
       max_torque = buf[0];
       pedal0_min = buf[1];
@@ -283,32 +281,38 @@ void sendRinehartCommand(){
 
   // compute commanded torque (N-m * 10 [10x factor is how Rinehart expects it])
   // TODO: should this be a linear map?
-  commanded_torque = map(pedal_avg, PEDAL_DEADBAND, 255, 0, 10*max_torque);
+  commanded_torque = map(pedal_avg, 0, 255, 0, 10*max_torque);
 
   if (pedal_avg < PEDAL_DEADBAND) {
+    commanded_torque = 0;
       // enable coasting regen if pedal is below deadband
-      commanded_torque = -10*coast_regen_torque;
+      //commanded_torque = -10*coast_regen_torque;
 
       // also apply brake regen proportionally to brake pressure
-      brake_torque = brake_avg * brake_regen_torque;
-      commanded_torque -= brake_torque;
+      //brake_torque = brake_avg * brake_regen_torque;
+      //commanded_torque -= brake_torque;
+  }
+
+   // check skew value, map to 0 if something is wrong
+  if(abs(pedal0_mapped-pedal1_mapped)> ACC_MAX_SKEW ){
+  //  commanded_torque = 0;
   }
 
   // if not ready to drive, no torque please.
   if (!ready_to_drive){
-    commanded_torque = 0;
+   commanded_torque = 0;
   }
 
   // build DAQ Message
   unsigned char bufToSend[8] = {0, 0, 0, 0, 0, 0, 0, 0};
-  bufToSend[0] = commanded_torque && 0xFF; // LSB
+  bufToSend[0] = commanded_torque; // LSB
   bufToSend[1] = commanded_torque >> 8; // MSB
   bufToSend[2] = 0; // speed command not used
   bufToSend[3] = 0; // speed command not used
   bufToSend[4] = direction; // "0" for reverse, "1" for forward, CS5 is normally "reverse"
   bufToSend[5] = ready_to_drive; // inverter enable 
-  bufToSend[6] = max_torque*10 && 0xFF; // LSB
-  bufToSend[7] = max_torque*10 >> 8; // MSB
+  bufToSend[6] = 0; //max_torque*10 && 0xFF; // LSB
+  bufToSend[7] = 0; //max_torque*10 >> 8; // MSB
 
   // send message
   CAN.sendMsgBuf(ID_RINEHART_COMMAND, 0, 8, bufToSend);
